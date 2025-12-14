@@ -35,57 +35,83 @@ if ! command -v uv &> /dev/null; then
 fi
 print_success "uv is installed"
 
-# Check if git submodules are initialized
+# Check if git submodules are initialized and checked out
 print_info "Checking git submodules..."
-if [ ! -d "submodules/ultralytics" ] || [ ! -f "submodules/ultralytics/.git" ]; then
-    print_info "Initializing git submodules..."
-    git submodule update --init --recursive
+SUBMODULES_NEED_UPDATE=false
+for submodule in submodules/ultralytics submodules/sam3 submodules/inference submodules/supervision; do
+    if [ ! -d "$submodule" ] || [ ! -f "$submodule/.git" ] || [ -z "$(ls -A "$submodule" 2>/dev/null)" ]; then
+        SUBMODULES_NEED_UPDATE=true
+        break
+    fi
+done
+
+if [ "$SUBMODULES_NEED_UPDATE" = true ]; then
+    print_info "Initializing and updating git submodules (shallow clone, latest commit only)..."
+    git submodule update --init --recursive --depth 1
+    # Ensure submodules are checked out (sometimes they're initialized but not checked out)
+    for submodule in submodules/ultralytics submodules/sam3 submodules/inference submodules/supervision; do
+        if [ -f "$submodule/.git" ] && [ -z "$(ls -A "$submodule" 2>/dev/null)" ]; then
+            print_info "Checking out $submodule..."
+            git -C "$submodule" checkout -f HEAD 2>/dev/null || true
+        fi
+    done
 fi
 print_success "Git submodules are ready"
 
-# Detect CUDA version
-print_info "Detecting CUDA version..."
-CUDA_VERSION=""
-if command -v nvcc &> /dev/null; then
-    CUDA_VERSION=$(nvcc --version 2>/dev/null | grep "release" | sed 's/.*release \([0-9]\+\.[0-9]\+\).*/\1/' || echo "")
+# Detect platform
+PLATFORM=$(uname -s)
+IS_MACOS=false
+if [ "$PLATFORM" = "Darwin" ]; then
+    IS_MACOS=true
 fi
 
-if [ -z "$CUDA_VERSION" ]; then
-    # Try to infer from nvidia-smi driver version
-    if command -v nvidia-smi &> /dev/null; then
-        DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1 || echo "")
-        if [ ! -z "$DRIVER_VERSION" ]; then
-            if [ "$DRIVER_VERSION" -ge 580 ]; then
-                CUDA_VERSION="12.1"
-            elif [ "$DRIVER_VERSION" -ge 550 ]; then
-                CUDA_VERSION="12.0"
-            elif [ "$DRIVER_VERSION" -ge 535 ]; then
-                CUDA_VERSION="11.8"
-            else
-                CUDA_VERSION="11.8"
+# Detect CUDA version (only on Linux)
+CUDA_VERSION=""
+PYTORCH_CUDA=""
+if [ "$IS_MACOS" = false ]; then
+    print_info "Detecting CUDA version..."
+    if command -v nvcc &> /dev/null; then
+        CUDA_VERSION=$(nvcc --version 2>/dev/null | grep "release" | sed 's/.*release \([0-9]\+\.[0-9]\+\).*/\1/' || echo "")
+    fi
+
+    if [ -z "$CUDA_VERSION" ]; then
+        # Try to infer from nvidia-smi driver version
+        if command -v nvidia-smi &> /dev/null; then
+            DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1 || echo "")
+            if [ ! -z "$DRIVER_VERSION" ]; then
+                if [ "$DRIVER_VERSION" -ge 580 ]; then
+                    CUDA_VERSION="12.1"
+                elif [ "$DRIVER_VERSION" -ge 550 ]; then
+                    CUDA_VERSION="12.0"
+                elif [ "$DRIVER_VERSION" -ge 535 ]; then
+                    CUDA_VERSION="11.8"
+                else
+                    CUDA_VERSION="11.8"
+                fi
             fi
         fi
     fi
-fi
 
-# Default to cu121 if detection fails
-if [ -z "$CUDA_VERSION" ]; then
-    print_warning "Could not detect CUDA version, defaulting to CUDA 12.1"
-    CUDA_VERSION="12.1"
-    PYTORCH_CUDA="cu121"
-elif [ "$(echo "$CUDA_VERSION >= 12.1" | bc -l 2>/dev/null || echo "0")" = "1" ]; then
-    PYTORCH_CUDA="cu121"
-elif [ "$(echo "$CUDA_VERSION >= 12.0" | bc -l 2>/dev/null || echo "0")" = "1" ]; then
-    PYTORCH_CUDA="cu121"  # cu121 is backward compatible with 12.0
-elif [ "$(echo "$CUDA_VERSION >= 11.8" | bc -l 2>/dev/null || echo "0")" = "1" ]; then
-    PYTORCH_CUDA="cu118"
+    # Default to cu121 if detection fails
+    if [ -z "$CUDA_VERSION" ]; then
+        print_warning "Could not detect CUDA version, defaulting to CUDA 12.1"
+        CUDA_VERSION="12.1"
+        PYTORCH_CUDA="cu121"
+    elif [ "$(echo "$CUDA_VERSION >= 12.1" | bc -l 2>/dev/null || echo "0")" = "1" ]; then
+        PYTORCH_CUDA="cu121"
+    elif [ "$(echo "$CUDA_VERSION >= 12.0" | bc -l 2>/dev/null || echo "0")" = "1" ]; then
+        PYTORCH_CUDA="cu121"  # cu121 is backward compatible with 12.0
+    elif [ "$(echo "$CUDA_VERSION >= 11.8" | bc -l 2>/dev/null || echo "0")" = "1" ]; then
+        PYTORCH_CUDA="cu118"
+    else
+        # For older CUDA versions, use cu118 which is backward compatible
+        print_warning "CUDA version $CUDA_VERSION detected. Using cu118 (backward compatible)"
+        PYTORCH_CUDA="cu118"
+    fi
+    print_success "Detected CUDA version: $CUDA_VERSION, using PyTorch with $PYTORCH_CUDA"
 else
-    # For older CUDA versions, use cu118 which is backward compatible
-    print_warning "CUDA version $CUDA_VERSION detected. Using cu118 (backward compatible)"
-    PYTORCH_CUDA="cu118"
+    print_info "macOS detected - will install PyTorch with MPS (Metal Performance Shaders) support"
 fi
-
-print_success "Detected CUDA version: $CUDA_VERSION, using PyTorch with $PYTORCH_CUDA"
 
 # Check GPU availability
 print_info "Checking GPU availability..."
@@ -108,8 +134,8 @@ print_info "Checking Python version requirements..."
 REQUIRED_PYTHON=">=3.9,<3.13"
 print_info "Project requires Python $REQUIRED_PYTHON (numpy 1.26 requires >=3.9,<3.13)"
 
-# Check current Python version
-CURRENT_PYTHON_VERSION=$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
+# Check current Python version (macOS-compatible)
+CURRENT_PYTHON_VERSION=$(python3 --version 2>&1 | sed -E 's/^Python ([0-9]+\.[0-9]+).*/\1/' | head -1)
 print_info "Current Python version: $CURRENT_PYTHON_VERSION"
 
 # Use uv to install/ensure correct Python version (3.12 recommended)
@@ -140,18 +166,25 @@ if [ ! -d "submodules/ultralytics" ] || [ ! -d "submodules/sam3" ]; then
 fi
 print_success "Submodules verified"
 
-# Install PyTorch with CUDA support first (needs special index URL)
+# Install PyTorch (CUDA on Linux, MPS on macOS)
 # Check if PyTorch is already installed to skip reinstallation
 if python3 -c "import torch; print(torch.__version__)" 2>/dev/null | grep -q .; then
     INSTALLED_TORCH_VERSION=$(python3 -c "import torch; print(torch.__version__)" 2>/dev/null)
     print_info "PyTorch already installed (version: $INSTALLED_TORCH_VERSION), skipping installation"
     print_info "If you need to reinstall, remove .venv and run the script again"
 else
-    print_info "Installing PyTorch with CUDA support ($PYTORCH_CUDA)..."
-    print_info "This may take a few minutes as PyTorch packages are large (~2-3 GB download)..."
-    # uv shows progress by default, no need for --progress-bar flag
-    uv pip install torch torchvision torchaudio --index-url "https://download.pytorch.org/whl/$PYTORCH_CUDA"
-    print_success "PyTorch with CUDA installed"
+    if [ "$IS_MACOS" = true ]; then
+        print_info "Installing PyTorch with MPS (Metal Performance Shaders) support for macOS..."
+        print_info "This may take a few minutes as PyTorch packages are large (~2-3 GB download)..."
+        uv pip install torch torchvision torchaudio
+        print_success "PyTorch with MPS support installed"
+    else
+        print_info "Installing PyTorch with CUDA support ($PYTORCH_CUDA)..."
+        print_info "This may take a few minutes as PyTorch packages are large (~2-3 GB download)..."
+        # uv shows progress by default, no need for --progress-bar flag
+        uv pip install torch torchvision torchaudio --index-url "https://download.pytorch.org/whl/$PYTORCH_CUDA"
+        print_success "PyTorch with CUDA installed"
+    fi
 fi
 
 # Setup .env file for configuration and secrets
@@ -190,7 +223,7 @@ fi
 
 # Verify Python version in venv
 print_info "Verifying Python version in virtual environment..."
-VENV_PYTHON_VERSION=$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
+VENV_PYTHON_VERSION=$(python3 --version 2>&1 | sed -E 's/^Python ([0-9]+\.[0-9]+).*/\1/' | head -1)
 print_info "Virtual environment Python version: $VENV_PYTHON_VERSION"
 
 # Install all dependencies using uv sync
@@ -283,7 +316,33 @@ fi
 # Verify GPU availability with PyTorch (quick check)
 print_info "Verifying GPU availability with PyTorch..."
 set +e  # Temporarily disable exit on error for faster failure
-python3 << 'VERIFY_EOF'
+if [ "$IS_MACOS" = true ]; then
+    python3 << 'VERIFY_EOF'
+import torch
+import sys
+import os
+
+# Suppress verbose output for faster execution
+os.environ['TORCH_LOGS'] = '+error'
+
+try:
+    # Check for MPS (Metal Performance Shaders) on macOS
+    mps_available = torch.backends.mps.is_available() if hasattr(torch.backends, 'mps') else False
+    
+    if mps_available:
+        print(f"PyTorch {torch.__version__}: MPS (Metal) available")
+        print("✓ GPU support working (MPS)")
+        sys.exit(0)
+    else:
+        print("✗ MPS not available")
+        print("  PyTorch will use CPU (slower)")
+        sys.exit(1)
+except Exception as e:
+    print(f"✗ Error: {e}")
+    sys.exit(1)
+VERIFY_EOF
+else
+    python3 << 'VERIFY_EOF'
 import torch
 import sys
 import os
@@ -316,21 +375,32 @@ except Exception as e:
     print(f"✗ Error: {e}")
     sys.exit(1)
 VERIFY_EOF
+fi
 VERIFY_EXIT_CODE=$?
 set -e  # Re-enable exit on error
 
 if [ $VERIFY_EXIT_CODE -eq 0 ]; then
     print_success "GPU verification passed!"
 else
-    print_warning "GPU verification failed or CUDA not available."
-    print_warning "Installation will continue, but GPU features may not work."
-    print_warning "You can verify GPU support later with: python3 -c 'import torch; print(torch.cuda.is_available())'"
+    if [ "$IS_MACOS" = true ]; then
+        print_warning "MPS verification failed or not available."
+        print_warning "Installation will continue, but GPU features may not work."
+        print_warning "You can verify MPS support later with: python3 -c 'import torch; print(torch.backends.mps.is_available())'"
+    else
+        print_warning "GPU verification failed or CUDA not available."
+        print_warning "Installation will continue, but GPU features may not work."
+        print_warning "You can verify GPU support later with: python3 -c 'import torch; print(torch.cuda.is_available())'"
+    fi
 fi
 
 print_success "Installation completed successfully!"
 print_info "Summary:"
 echo "  ✓ Virtual environment: .venv"
-echo "  ✓ PyTorch with CUDA support installed"
+if [ "$IS_MACOS" = true ]; then
+    echo "  ✓ PyTorch with MPS (Metal) support installed"
+else
+    echo "  ✓ PyTorch with CUDA support installed"
+fi
 echo "  ✓ All dependencies installed via uv sync (ultralytics, sam3, and dependencies)"
 if [ -f "models/sam3.pt" ]; then
     echo "  ✓ SAM3 model weights (models/sam3.pt) downloaded"
