@@ -13,6 +13,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
+import cv2
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent.parent
@@ -54,7 +55,66 @@ def check_requirements():
     return str(model_path)
 
 
-def visualize_frames_side_by_side(frames_list, titles, output_path):
+def add_rulers_to_axis(ax, img_shape):
+    """Add x and y axis rulers to matplotlib axis."""
+    h, w = img_shape[:2]
+    # Enable axes
+    ax.axis("on")
+    # Set limits
+    ax.set_xlim(0, w)
+    ax.set_ylim(h, 0)  # Invert y-axis for image coordinates
+    # Add labels
+    ax.set_xlabel("X (pixels)", fontsize=10)
+    ax.set_ylabel("Y (pixels)", fontsize=10)
+    # Add grid
+    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+    # Set tick spacing
+    ax.set_xticks(range(0, w, max(50, w // 10)))
+    ax.set_yticks(range(0, h, max(50, h // 10)))
+
+
+def add_bbox_labels_to_frame(frame, bboxes):
+    """Add coordinate labels to bounding boxes in frame."""
+    frame_labeled = frame.copy()
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.4
+    thickness = 1
+    
+    for bbox in bboxes:
+        x1, y1, x2, y2 = map(int, bbox)
+        # Add coordinate labels at all four corners
+        corners = [
+            ((x1, y1), f"({x1},{y1})"),  # Top-left
+            ((x2, y1), f"({x2},{y1})"),  # Top-right
+            ((x1, y2), f"({x1},{y2})"),  # Bottom-left
+            ((x2, y2), f"({x2},{y2})"),  # Bottom-right
+        ]
+        
+        for (cx, cy), coord_text in corners:
+            (text_width, text_height), baseline = cv2.getTextSize(coord_text, font, font_scale, thickness)
+            
+            # Position label near corner
+            label_x = cx - text_width // 2
+            label_y = cy - 5 if cy < frame_labeled.shape[0] // 2 else cy + text_height + 5
+            
+            # Adjust if label goes outside image bounds
+            label_x = max(0, min(label_x, frame_labeled.shape[1] - text_width))
+            label_y = max(text_height, min(label_y, frame_labeled.shape[0] - baseline))
+            
+            # Draw background rectangle
+            cv2.rectangle(frame_labeled, 
+                         (label_x - 2, label_y - text_height - 2), 
+                         (label_x + text_width + 2, label_y + baseline + 2), 
+                         (0, 0, 0), -1)
+            
+            # Draw coordinate text
+            cv2.putText(frame_labeled, coord_text, (label_x, label_y), 
+                       font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    
+    return frame_labeled
+
+
+def visualize_frames_side_by_side(frames_list, titles, output_path, bboxes=None):
     """Create side-by-side visualization of video frames."""
     num_frames = len(frames_list)
     if num_frames == 0:
@@ -66,9 +126,12 @@ def visualize_frames_side_by_side(frames_list, titles, output_path):
         axes = [axes]
     
     for idx, (frame, title) in enumerate(zip(frames_list, titles)):
+        # Add bbox labels if provided
+        if bboxes is not None:
+            frame = add_bbox_labels_to_frame(frame, bboxes)
         axes[idx].imshow(frame)
         axes[idx].set_title(title, fontsize=14, fontweight="bold")
-        axes[idx].axis("off")
+        add_rulers_to_axis(axes[idx], frame.shape)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
@@ -150,7 +213,8 @@ def main():
     visualize_frames_side_by_side(
         frames,
         frame_titles,
-        output_dir / "04-video-tracking.png"
+        output_dir / "04-video-tracking.png",
+        bboxes=bboxes
     )
     
     print("\n" + "=" * 80)

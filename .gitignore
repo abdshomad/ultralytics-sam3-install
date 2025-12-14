@@ -165,3 +165,4 @@ weights/
 
 # Keep submodules (they're tracked by git submodule)
 !submodules/
+**/outputs/*.png

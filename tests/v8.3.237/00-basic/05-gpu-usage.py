@@ -73,6 +73,24 @@ def check_gpu_availability():
         return False, "cpu"
 
 
+def add_rulers_to_axis(ax, img_shape):
+    """Add x and y axis rulers to matplotlib axis."""
+    h, w = img_shape[:2]
+    # Enable axes
+    ax.axis("on")
+    # Set limits
+    ax.set_xlim(0, w)
+    ax.set_ylim(h, 0)  # Invert y-axis for image coordinates
+    # Add labels
+    ax.set_xlabel("X (pixels)", fontsize=10)
+    ax.set_ylabel("Y (pixels)", fontsize=10)
+    # Add grid
+    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+    # Set tick spacing
+    ax.set_xticks(range(0, w, max(50, w // 10)))
+    ax.set_yticks(range(0, h, max(50, h // 10)))
+
+
 def visualize_side_by_side(original_img, result, gpu_info, output_path):
     """Create side-by-side visualization of original image, results, and GPU info."""
     fig = plt.figure(figsize=(16, 8))
@@ -84,14 +102,14 @@ def visualize_side_by_side(original_img, result, gpu_info, output_path):
     ax1 = fig.add_subplot(gs[0, 0])
     ax1.imshow(original_img)
     ax1.set_title("Original Image", fontsize=14, fontweight="bold")
-    ax1.axis("off")
+    add_rulers_to_axis(ax1, original_img.shape)
     
     # Results
     ax2 = fig.add_subplot(gs[0, 1])
     annotated = result.plot()
     ax2.imshow(annotated)
     ax2.set_title("Segmentation Results", fontsize=14, fontweight="bold")
-    ax2.axis("off")
+    add_rulers_to_axis(ax2, annotated.shape)
     
     # GPU information
     ax3 = fig.add_subplot(gs[1, :])

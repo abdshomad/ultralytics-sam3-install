@@ -165,17 +165,35 @@ def visualize_red_blue_cloth_combined(result_red, result_blue, original_img, ela
     return vis_img
 
 
+def add_rulers_to_axis(ax, img_shape):
+    """Add x and y axis rulers to matplotlib axis."""
+    h, w = img_shape[:2]
+    # Enable axes
+    ax.axis("on")
+    # Set limits
+    ax.set_xlim(0, w)
+    ax.set_ylim(h, 0)  # Invert y-axis for image coordinates
+    # Add labels
+    ax.set_xlabel("X (pixels)", fontsize=10)
+    ax.set_ylabel("Y (pixels)", fontsize=10)
+    # Add grid
+    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+    # Set tick spacing
+    ax.set_xticks(range(0, w, max(50, w // 10)))
+    ax.set_yticks(range(0, h, max(50, h // 10)))
+
+
 def visualize_side_by_side(original_img, results_list, titles, output_path, use_custom_blue=False, elapsed_time=None):
     """Create side-by-side visualization of original image and results."""
     num_results = len(results_list)
     fig, axes = plt.subplots(1, num_results + 1, figsize=(6 * (num_results + 1), 6))
     
-    # Display original image
+    # Display original image with rulers
     axes[0].imshow(original_img)
     axes[0].set_title("Original Image", fontsize=14, fontweight="bold")
-    axes[0].axis("off")
+    add_rulers_to_axis(axes[0], original_img.shape)
     
-    # Display each result
+    # Display each result with rulers
     for idx, (result, title) in enumerate(zip(results_list, titles), 1):
         if use_custom_blue and "red/blue cloth" in title.lower():
             # This should be handled separately with combined visualization
@@ -191,7 +209,7 @@ def visualize_side_by_side(original_img, results_list, titles, output_path, use_
                 annotated = add_time_text(annotated, elapsed_time)
         axes[idx].imshow(annotated)
         axes[idx].set_title(title, fontsize=14, fontweight="bold")
-        axes[idx].axis("off")
+        add_rulers_to_axis(axes[idx], annotated.shape)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
@@ -311,11 +329,11 @@ def main():
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
     axes[0].imshow(original_img_phrases)
     axes[0].set_title("Original Image", fontsize=14, fontweight="bold")
-    axes[0].axis("off")
+    add_rulers_to_axis(axes[0], original_img_phrases.shape)
     
     axes[1].imshow(combined_img)
     axes[1].set_title("Descriptive: person with red/blue cloth", fontsize=14, fontweight="bold")
-    axes[1].axis("off")
+    add_rulers_to_axis(axes[1], combined_img.shape)
     
     plt.tight_layout()
     plt.savefig(output_dir / "01-text-prompts-phrases.png", dpi=150, bbox_inches="tight")

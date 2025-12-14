@@ -65,7 +65,7 @@ def get_image_size(image_path):
 
 
 def draw_points_on_image(img, points, point_labels):
-    """Draw positive (+) and negative (-) points on image."""
+    """Draw positive (+) and negative (-) points on image with coordinate labels."""
     vis_img = img.copy()
     for point, label in zip(points, point_labels):
         x, y = int(point[0]), int(point[1])
@@ -77,12 +77,37 @@ def draw_points_on_image(img, points, point_labels):
             cv2.circle(vis_img, (x, y), 10, (0, 0, 255), -1)  # Red circle
             cv2.circle(vis_img, (x, y), 10, (255, 255, 255), 2)  # White border
             cv2.putText(vis_img, '-', (x - 5, y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+        
+        # Add coordinate label
+        coord_text = f"({x},{y})"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        thickness = 1
+        (text_width, text_height), baseline = cv2.getTextSize(coord_text, font, font_scale, thickness)
+        
+        # Position label above point
+        label_x = x - text_width // 2
+        label_y = y - 15
+        
+        # Draw background rectangle
+        cv2.rectangle(vis_img, 
+                     (label_x - 3, label_y - text_height - 3), 
+                     (label_x + text_width + 3, label_y + baseline + 3), 
+                     (0, 0, 0), -1)
+        
+        # Draw coordinate text
+        cv2.putText(vis_img, coord_text, (label_x, label_y), 
+                   font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
     return vis_img
 
 
 def draw_boxes_on_image(img, boxes, box_labels=None):
-    """Draw positive (+) and negative (-) boxes on image."""
+    """Draw positive (+) and negative (-) boxes on image with coordinate labels at corners."""
     vis_img = img.copy()
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.4
+    thickness = 1
+    
     for i, box in enumerate(boxes):
         x1, y1, x2, y2 = map(int, box)
         if box_labels is None or box_labels[i] == 1:  # Positive box
@@ -91,7 +116,54 @@ def draw_boxes_on_image(img, boxes, box_labels=None):
         else:  # Negative box
             cv2.rectangle(vis_img, (x1, y1), (x2, y2), (0, 0, 255), 3)  # Red
             cv2.putText(vis_img, '-', (x1 + 5, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        
+        # Add coordinate labels at all four corners
+        corners = [
+            ((x1, y1), f"({x1},{y1})"),  # Top-left
+            ((x2, y1), f"({x2},{y1})"),  # Top-right
+            ((x1, y2), f"({x1},{y2})"),  # Bottom-left
+            ((x2, y2), f"({x2},{y2})"),  # Bottom-right
+        ]
+        
+        for (cx, cy), coord_text in corners:
+            (text_width, text_height), baseline = cv2.getTextSize(coord_text, font, font_scale, thickness)
+            
+            # Position label near corner
+            label_x = cx - text_width // 2
+            label_y = cy - 5 if cy < vis_img.shape[0] // 2 else cy + text_height + 5
+            
+            # Adjust if label goes outside image bounds
+            label_x = max(0, min(label_x, vis_img.shape[1] - text_width))
+            label_y = max(text_height, min(label_y, vis_img.shape[0] - baseline))
+            
+            # Draw background rectangle
+            cv2.rectangle(vis_img, 
+                         (label_x - 2, label_y - text_height - 2), 
+                         (label_x + text_width + 2, label_y + baseline + 2), 
+                         (0, 0, 0), -1)
+            
+            # Draw coordinate text
+            cv2.putText(vis_img, coord_text, (label_x, label_y), 
+                       font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
     return vis_img
+
+
+def add_rulers_to_axis(ax, img_shape):
+    """Add x and y axis rulers to matplotlib axis."""
+    h, w = img_shape[:2]
+    # Enable axes
+    ax.axis("on")
+    # Set limits
+    ax.set_xlim(0, w)
+    ax.set_ylim(h, 0)  # Invert y-axis for image coordinates
+    # Add labels
+    ax.set_xlabel("X (pixels)", fontsize=10)
+    ax.set_ylabel("Y (pixels)", fontsize=10)
+    # Add grid
+    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+    # Set tick spacing
+    ax.set_xticks(range(0, w, max(50, w // 10)))
+    ax.set_yticks(range(0, h, max(50, h // 10)))
 
 
 def visualize_prompt_and_result(original_img, prompt_img, result, title, output_path):
@@ -101,18 +173,18 @@ def visualize_prompt_and_result(original_img, prompt_img, result, title, output_
     # Left: Original image with prompts
     axes[0].imshow(prompt_img)
     axes[0].set_title("Original + Prompts", fontsize=14, fontweight="bold")
-    axes[0].axis("off")
+    add_rulers_to_axis(axes[0], prompt_img.shape)
     
     # Right: Detection result
     if result is not None:
         annotated = result.plot()
         axes[1].imshow(annotated)
         axes[1].set_title("Detection Result", fontsize=14, fontweight="bold")
-        axes[1].axis("off")
+        add_rulers_to_axis(axes[1], annotated.shape)
     else:
         axes[1].imshow(original_img)
         axes[1].set_title("Detection Result (No detections)", fontsize=14, fontweight="bold")
-        axes[1].axis("off")
+        add_rulers_to_axis(axes[1], original_img.shape)
     
     # Add overall title
     fig.suptitle(title, fontsize=16, fontweight="bold", y=0.98)
@@ -130,7 +202,7 @@ def main():
     print("=" * 80)
     
     # Text prompts array
-    text_prompts = ["all trees", "glasses", "bicycle", "sign", "balcony"]
+    text_prompts = ["right glasses", "right hand", "right shoess"]
     
     # Check requirements
     print("\n[1/8] Checking requirements...")
@@ -176,8 +248,8 @@ def main():
     
     # Define prompts
     center_x, center_y = img_width // 2, img_height // 2
-    # Positive point (center)
-    pos_point = [[center_x, center_y]]
+    # Positive point (user-specified coordinates)
+    pos_point = [[430, 730]]
     pos_point_label = [1]
     # Negative point (offset)
     neg_point = [[center_x + 100, center_y + 100]]

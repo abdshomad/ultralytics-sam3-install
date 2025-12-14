@@ -13,6 +13,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageDraw
+import cv2
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent.parent
@@ -60,10 +61,10 @@ def check_requirements():
 
 
 def draw_exemplar_box(img_array, bbox, color=(255, 0, 0), width=3):
-    """Draw exemplar bounding box on image."""
+    """Draw exemplar bounding box on image with coordinate labels at corners."""
     img = Image.fromarray(img_array)
     draw = ImageDraw.Draw(img)
-    x1, y1, x2, y2 = bbox
+    x1, y1, x2, y2 = map(int, bbox)
     # Draw rectangle
     for i in range(width):
         draw.rectangle(
@@ -71,7 +72,61 @@ def draw_exemplar_box(img_array, bbox, color=(255, 0, 0), width=3):
             outline=color,
             width=1
         )
-    return np.array(img)
+    
+    # Convert to numpy for OpenCV text drawing
+    img_np = np.array(img)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.4
+    thickness = 1
+    
+    # Add coordinate labels at all four corners
+    corners = [
+        ((x1, y1), f"({x1},{y1})"),  # Top-left
+        ((x2, y1), f"({x2},{y1})"),  # Top-right
+        ((x1, y2), f"({x1},{y2})"),  # Bottom-left
+        ((x2, y2), f"({x2},{y2})"),  # Bottom-right
+    ]
+    
+    for (cx, cy), coord_text in corners:
+        (text_width, text_height), baseline = cv2.getTextSize(coord_text, font, font_scale, thickness)
+        
+        # Position label near corner
+        label_x = cx - text_width // 2
+        label_y = cy - 5 if cy < img_np.shape[0] // 2 else cy + text_height + 5
+        
+        # Adjust if label goes outside image bounds
+        label_x = max(0, min(label_x, img_np.shape[1] - text_width))
+        label_y = max(text_height, min(label_y, img_np.shape[0] - baseline))
+        
+        # Draw background rectangle
+        cv2.rectangle(img_np, 
+                     (label_x - 2, label_y - text_height - 2), 
+                     (label_x + text_width + 2, label_y + baseline + 2), 
+                     (0, 0, 0), -1)
+        
+        # Draw coordinate text
+        cv2.putText(img_np, coord_text, (label_x, label_y), 
+                   font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    
+    return img_np
+
+
+def add_rulers_to_axis(ax, img_shape):
+    """Add x and y axis rulers to matplotlib axis."""
+    h, w = img_shape[:2]
+    # Enable axes
+    ax.axis("on")
+    # Set limits
+    ax.set_xlim(0, w)
+    ax.set_ylim(h, 0)  # Invert y-axis for image coordinates
+    # Add labels
+    ax.set_xlabel("X (pixels)", fontsize=10)
+    ax.set_ylabel("Y (pixels)", fontsize=10)
+    # Add grid
+    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+    # Set tick spacing
+    ax.set_xticks(range(0, w, max(50, w // 10)))
+    ax.set_yticks(range(0, h, max(50, h // 10)))
 
 
 def visualize_side_by_side(original_img, exemplar_img, result, output_path):
@@ -81,18 +136,18 @@ def visualize_side_by_side(original_img, exemplar_img, result, output_path):
     # Display original image
     axes[0].imshow(original_img)
     axes[0].set_title("Original Image", fontsize=14, fontweight="bold")
-    axes[0].axis("off")
+    add_rulers_to_axis(axes[0], original_img.shape)
     
     # Display exemplar box
     axes[1].imshow(exemplar_img)
     axes[1].set_title("Exemplar Box", fontsize=14, fontweight="bold")
-    axes[1].axis("off")
+    add_rulers_to_axis(axes[1], exemplar_img.shape)
     
     # Display result
     annotated = result.plot()
     axes[2].imshow(annotated)
     axes[2].set_title("All Similar Instances", fontsize=14, fontweight="bold")
-    axes[2].axis("off")
+    add_rulers_to_axis(axes[2], annotated.shape)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
