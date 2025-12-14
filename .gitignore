@@ -1,5 +1,6 @@
 .env
 models/
+screenshots/
 
 # Python
 __pycache__/
