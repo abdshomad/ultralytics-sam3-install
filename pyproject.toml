@@ -1,0 +1,20 @@
+[project]
+name = "ultralytics-sam3-install"
+version = "0.1.0"
+description = "Installation setup for Ultralytics with SAM3 integration and GPU support"
+requires-python = ">=3.8"
+readme = "README.md"
+license = { text = "MIT" }
+
+dependencies = [
+    # Ultralytics will be installed from submodule in editable mode
+    # PyTorch with CUDA will be installed separately in install.sh to ensure GPU support
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = []
+
