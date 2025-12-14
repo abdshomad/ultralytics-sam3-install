@@ -1,3 +1,6 @@
+.env
+models/
+
 # Python
 __pycache__/
 *.py[cod]

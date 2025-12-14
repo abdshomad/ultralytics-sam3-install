@@ -1,0 +1,1 @@
+think deeply 5 best solutions. pick top 3 and try one by one until succeeded. when not yet succeeded, continue to next 2 possible solutions until succeeded. 
