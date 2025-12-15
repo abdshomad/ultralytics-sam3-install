@@ -73,6 +73,12 @@ cp .env.example .env
 # Edit .env and add your HF_TOKEN
 ```
 
+**For Google Colab users**: The installation script automatically detects Colab and will try to load `HF_TOKEN` from Colab's userdata secrets. To set it up:
+
+1. In Colab, go to the left sidebar → 🔑 **Secrets** (or use `from google.colab import userdata`)
+2. Add a new secret named `HF_TOKEN` with your Hugging Face token as the value
+3. The installation script will automatically use this token (priority: Colab userdata → Environment variable → `.env` file)
+
 ### 3. Run the Installation Script
 
 The installation script will:

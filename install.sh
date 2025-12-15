@@ -214,8 +214,35 @@ else
     print_success ".env file already exists"
 fi
 
-# Load HF_TOKEN from environment variable or .env file
-# Priority: 1) Environment variable, 2) .env file
+# Load HF_TOKEN with priority: 1) Colab userdata, 2) Environment variable, 3) .env file
+# Check if running in Google Colab and get HF_TOKEN from userdata
+if [ -z "$HF_TOKEN" ]; then
+    # Try to get HF_TOKEN from Colab userdata if available
+    # Check for Colab environment (COLAB_GPU env var or google.colab module)
+    if [ -n "$COLAB_GPU" ] || python3 -c "from google.colab import userdata" 2>/dev/null; then
+        print_info "Detected Google Colab environment, checking userdata for HF_TOKEN..."
+        COLAB_HF_TOKEN=$(python3 << 'PYTHON_EOF'
+try:
+    from google.colab import userdata
+    token = userdata.get('HF_TOKEN')
+    if token:
+        print(token)
+    else:
+        print("")
+except Exception:
+    print("")
+PYTHON_EOF
+        )
+        if [ -n "$COLAB_HF_TOKEN" ]; then
+            HF_TOKEN="$COLAB_HF_TOKEN"
+            print_success "Loaded HF_TOKEN from Google Colab userdata"
+        else
+            print_info "HF_TOKEN not found in Colab userdata, will check other sources"
+        fi
+    fi
+fi
+
+# Load from environment variable or .env file
 if [ -z "$HF_TOKEN" ]; then
     if [ -f ".env" ]; then
         print_info "Loading HF_TOKEN from .env file..."
@@ -224,7 +251,9 @@ if [ -z "$HF_TOKEN" ]; then
         set +a
     fi
 else
-    print_info "Using HF_TOKEN from environment variable"
+    if [ -z "$COLAB_HF_TOKEN" ]; then
+        print_info "Using HF_TOKEN from environment variable"
+    fi
 fi
 
 # Verify Python version in venv
