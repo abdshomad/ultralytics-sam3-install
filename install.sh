@@ -214,11 +214,17 @@ else
     print_success ".env file already exists"
 fi
 
-# Load .env file if it exists
-if [ -f ".env" ]; then
-    set -a
-    source .env 2>/dev/null || true
-    set +a
+# Load HF_TOKEN from environment variable or .env file
+# Priority: 1) Environment variable, 2) .env file
+if [ -z "$HF_TOKEN" ]; then
+    if [ -f ".env" ]; then
+        print_info "Loading HF_TOKEN from .env file..."
+        set -a
+        source .env 2>/dev/null || true
+        set +a
+    fi
+else
+    print_info "Using HF_TOKEN from environment variable"
 fi
 
 # Verify Python version in venv
