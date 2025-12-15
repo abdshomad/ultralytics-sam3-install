@@ -294,6 +294,7 @@ def main():
     seen_track_ids = set()
     frame_inference_times = []
     total_inference_time = 0.0
+    avg_time = 0.0  # Initialize to avoid UnboundLocalError when no frames processed
     start_time = time.time()
     
     # Generate color palette
@@ -391,14 +392,25 @@ def main():
             if frame_count % 10 == 0:
                 print(f"Processed {frame_count} frames... (Avg: {avg_time:.1f} ms/frame)")
     
+    # Calculate average if frames were processed
+    if frame_count > 0:
+        avg_time = total_inference_time / frame_count
+    else:
+        avg_time = 0.0
+        print("\nWarning: No frames were processed. The video file may be corrupted or unreadable.")
+    
     total_processing_time = time.time() - start_time
     print(f"\nProcessing complete!")
     print(f"Total frames: {frame_count}")
-    print(f"Total inference time: {total_inference_time / 1000.0:.2f} s")
-    print(f"Average inference time: {avg_time:.1f} ms/frame")
+    if frame_count > 0:
+        print(f"Total inference time: {total_inference_time / 1000.0:.2f} s")
+        print(f"Average inference time: {avg_time:.1f} ms/frame")
     print(f"Total processing time: {total_processing_time:.2f} s")
     print(f"Total unique persons tracked: {len(seen_track_ids)}")
-    print(f"Output saved to: {args.output}")
+    if frame_count > 0:
+        print(f"Output saved to: {args.output}")
+    else:
+        print(f"Warning: No output file created (no frames processed)")
 
 
 if __name__ == "__main__":

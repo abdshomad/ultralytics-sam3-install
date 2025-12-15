@@ -25,6 +25,7 @@ dependencies = [
     # Supervision dependencies
     "defusedxml",
     "supervision",
+    # Video download dependencies
     "yt-dlp",
     # Editable dependencies from submodules (sources defined in [tool.uv.sources])
     "ultralytics",
