@@ -6,12 +6,22 @@ displaying track IDs, trails, statistics, and confidence-based transparency.
 """
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+# Fix matplotlib backend issue (especially in Colab/Jupyter environments)
+# Jupyter/Colab sets MPLBACKEND to 'module://matplotlib_inline.backend_inline'
+# which is not valid for regular Python scripts. Use Agg (non-interactive) instead.
+if 'MPLBACKEND' in os.environ:
+    backend = os.environ['MPLBACKEND']
+    # If backend contains 'inline' or 'module://', it's a Jupyter-specific backend
+    if 'inline' in backend.lower() or 'module://' in backend:
+        os.environ['MPLBACKEND'] = 'Agg'
 
 # Add project root to path for imports
 project_root = Path(__file__).parent.parent

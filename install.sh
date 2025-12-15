@@ -428,4 +428,3 @@ if [ ! -f "models/sam3.pt" ]; then
     echo "  2. Request access to SAM3 at: https://huggingface.co/facebook/sam3"
     echo "  3. Run the download command or restart this script"
 fi
-
